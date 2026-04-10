@@ -50,24 +50,24 @@ jobs:
             const from = new Date(Date.UTC(year, 0, 1, 0, 0, 0)).toISOString();
             const to = now.toISOString();
 
+            // contributionCalendar au niveau viewer (évite un sous-calendrier lourd dans contributionsCollection).
             const query = `
               query($from: DateTime!, $to: DateTime!) {
                 viewer {
                   login
+                  contributionCalendar(from: $from, to: $to) {
+                    totalContributions
+                  }
                   contributionsCollection(from: $from, to: $to) {
                     totalCommitContributions
-                    contributionCalendar {
-                      totalContributions
-                    }
                   }
                 }
               }
             `;
 
             const data = await github.graphql(query, { from, to });
-            const col = data.viewer.contributionsCollection;
-            const totalContrib = col.contributionCalendar.totalContributions;
-            const commitContrib = col.totalCommitContributions;
+            const totalContrib = data.viewer.contributionCalendar.totalContributions;
+            const commitContrib = data.viewer.contributionsCollection.totalCommitContributions;
 
             const badgeUrl = (label, message, color) =>
               'https://img.shields.io/static/v1?' +
