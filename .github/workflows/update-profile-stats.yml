@@ -60,8 +60,8 @@ jobs:
             const from = new Date(Date.UTC(year, 0, 1, 0, 0, 0)).toISOString();
             const to = now.toISOString();
 
-            // Repo profile = owner du dépôt (ex. yaka0007/yaka0007 → yaka0007). user(login:) est souvent plus stable que viewer avec un PAT.
-            const login = github.context.repo.owner;
+            // Repo profile = owner du dépôt (ex. yaka0007/yaka0007 → yaka0007). Dans github-script, utiliser le global `context`, pas github.context (Octokit n’a pas .context).
+            const login = context.repo.owner;
 
             const toDay = now.toISOString().slice(0, 10);
 
