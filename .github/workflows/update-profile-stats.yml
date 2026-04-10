@@ -2,10 +2,10 @@
 # via l’API GraphQL — inclut l’activité sur les dépôts privés pour TON compte.
 #
 # IMPORTANT : le GITHUB_TOKEN des Actions n’est pas ton utilisateur (c’est github-actions[bot]).
-# Il faut un PAT CLASSIQUE (pas fine-grained) avec scope `read:user` uniquement.
-# Les PAT fine-grained provoquent souvent l’erreur GraphQL « Something went wrong » sur les contributions.
+# PAT CLASSIQUE avec scope exact : `read:user` (section « User » des cases à cocher).
+# Vérifie sur la page du token : bouton « Configure SSO » à cliquer pour chaque org SAML — sinon l’API peut planter.
 #   Repo → Settings → Secrets and variables → Actions → New repository secret
-#   Name: PROFILE_STATS_PAT   Value: classic PAT → https://github.com/settings/tokens → Generate new token (classic)
+#   Name: PROFILE_STATS_PAT
 #
 # Déclenché : chaque lundi 06:00 UTC, ou manuellement (workflow_dispatch).
 
@@ -39,6 +39,14 @@ jobs:
             exit 1
           fi
 
+      - name: Verify PAT scopes (header only, token hidden)
+        env:
+          PROFILE_STATS_PAT: ${{ secrets.PROFILE_STATS_PAT }}
+        run: |
+          echo "Expected scope line contains: read:user"
+          curl -sS -I -H "Authorization: Bearer ${PROFILE_STATS_PAT}" https://api.github.com/user \
+            | tr -d '\r' | grep -i '^x-oauth-scopes:' || echo "::warning::No X-OAuth-Scopes (unexpected for classic PAT)"
+
       - name: Fetch GitHub stats & rewrite README
         uses: actions/github-script@v7
         with:
@@ -51,44 +59,35 @@ jobs:
             const from = new Date(Date.UTC(year, 0, 1, 0, 0, 0)).toISOString();
             const to = now.toISOString();
 
-            const failHint =
-              'GraphQL contributions failed. Use a CLASSIC personal access token (not fine-grained) with scope read:user only. ' +
-              'https://github.com/settings/tokens → Generate new token (classic). Update repo secret PROFILE_STATS_PAT.';
+            // Repo profile = owner du dépôt (ex. yaka0007/yaka0007 → yaka0007). user(login:) est souvent plus stable que viewer avec un PAT.
+            const login = github.context.repo.owner;
 
-            let login;
-            try {
-              const ping = await github.graphql(`query { viewer { login } }`);
-              login = ping.viewer.login;
-            } catch (e) {
-              core.setFailed(`${failHint} (viewer login: ${e.message})`);
-              throw e;
-            }
+            const failHint =
+              'GraphQL contributions failed. Check: (1) classic PAT with scope read:user — see curl step X-OAuth-Scopes; ' +
+              '(2) on token page, Configure SSO for each SAML org; (3) update secret PROFILE_STATS_PAT. ';
 
             let totalContrib;
-            try {
-              const cal = await github.graphql(
-                `query($from: DateTime!, $to: DateTime!) {
-                  viewer { contributionCalendar(from: $from, to: $to) { totalContributions } }
-                }`,
-                { from, to }
-              );
-              totalContrib = cal.viewer.contributionCalendar.totalContributions;
-            } catch (e) {
-              core.setFailed(`${failHint} (contributionCalendar: ${e.message})`);
-              throw e;
-            }
-
             let commitContrib;
             try {
-              const col = await github.graphql(
-                `query($from: DateTime!, $to: DateTime!) {
-                  viewer { contributionsCollection(from: $from, to: $to) { totalCommitContributions } }
+              const out = await github.graphql(
+                `query($login: String!, $from: DateTime!, $to: DateTime!) {
+                  user(login: $login) {
+                    contributionsCollection(from: $from, to: $to) {
+                      totalCommitContributions
+                      contributionCalendar { totalContributions }
+                    }
+                  }
                 }`,
-                { from, to }
+                { login, from, to }
               );
-              commitContrib = col.viewer.contributionsCollection.totalCommitContributions;
+              if (!out.user || !out.user.contributionsCollection) {
+                throw new Error(`user(login: "${login}") has no contributionsCollection (wrong repo owner?)`);
+              }
+              const col = out.user.contributionsCollection;
+              totalContrib = col.contributionCalendar.totalContributions;
+              commitContrib = col.totalCommitContributions;
             } catch (e) {
-              core.setFailed(`${failHint} (contributionsCollection: ${e.message})`);
+              core.setFailed(`${failHint} (${e.message})`);
               throw e;
             }
 
