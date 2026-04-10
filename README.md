@@ -4,6 +4,14 @@
 
 <br/>
 
+<!--PROFILE_STATS_START-->
+![GitHub contributions 2026](https://img.shields.io/badge/contributions%202026-%E2%80%94-22c55e?style=flat-square&logo=github)
+![Commits 2026](https://img.shields.io/badge/commits%202026-%E2%80%94-0369a1?style=flat-square&logo=github)
+*Includes private repos · updated weekly by Actions*
+<!--PROFILE_STATS_END-->
+
+<br/>
+
 [![last commit](https://img.shields.io/github/last-commit/yaka0007/Mnemosyne-Neural-OS/main?label=last%20commit)](https://github.com/yaka0007/Mnemosyne-Neural-OS/commits/main/)
 [![commit activity](https://img.shields.io/github/commit-activity/m/yaka0007/Mnemosyne-Neural-OS?label=commit%20activity)](https://github.com/yaka0007/Mnemosyne-Neural-OS/graphs/commit-activity)
 
