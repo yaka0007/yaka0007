@@ -2,9 +2,10 @@
 # via l’API GraphQL — inclut l’activité sur les dépôts privés pour TON compte.
 #
 # IMPORTANT : le GITHUB_TOKEN des Actions n’est pas ton utilisateur (c’est github-actions[bot]).
-# Il faut un PAT perso avec scope `read:user` :
+# Il faut un PAT CLASSIQUE (pas fine-grained) avec scope `read:user` uniquement.
+# Les PAT fine-grained provoquent souvent l’erreur GraphQL « Something went wrong » sur les contributions.
 #   Repo → Settings → Secrets and variables → Actions → New repository secret
-#   Name: PROFILE_STATS_PAT   Value: (classic PAT ou fine-grained avec read access User)
+#   Name: PROFILE_STATS_PAT   Value: classic PAT → https://github.com/settings/tokens → Generate new token (classic)
 #
 # Déclenché : chaque lundi 06:00 UTC, ou manuellement (workflow_dispatch).
 
@@ -34,7 +35,7 @@ jobs:
           PROFILE_STATS_PAT: ${{ secrets.PROFILE_STATS_PAT }}
         run: |
           if [ -z "$PROFILE_STATS_PAT" ]; then
-            echo "::error::Create a classic PAT (scope: read:user) and add repo secret PROFILE_STATS_PAT — see workflow comments."
+            echo "::error::Add classic PAT (not fine-grained) with scope read:user as PROFILE_STATS_PAT — see workflow header."
             exit 1
           fi
 
@@ -50,24 +51,48 @@ jobs:
             const from = new Date(Date.UTC(year, 0, 1, 0, 0, 0)).toISOString();
             const to = now.toISOString();
 
-            // contributionCalendar au niveau viewer (évite un sous-calendrier lourd dans contributionsCollection).
-            const query = `
-              query($from: DateTime!, $to: DateTime!) {
-                viewer {
-                  login
-                  contributionCalendar(from: $from, to: $to) {
-                    totalContributions
-                  }
-                  contributionsCollection(from: $from, to: $to) {
-                    totalCommitContributions
-                  }
-                }
-              }
-            `;
+            const failHint =
+              'GraphQL contributions failed. Use a CLASSIC personal access token (not fine-grained) with scope read:user only. ' +
+              'https://github.com/settings/tokens → Generate new token (classic). Update repo secret PROFILE_STATS_PAT.';
 
-            const data = await github.graphql(query, { from, to });
-            const totalContrib = data.viewer.contributionCalendar.totalContributions;
-            const commitContrib = data.viewer.contributionsCollection.totalCommitContributions;
+            let login;
+            try {
+              const ping = await github.graphql(`query { viewer { login } }`);
+              login = ping.viewer.login;
+            } catch (e) {
+              core.setFailed(`${failHint} (viewer login: ${e.message})`);
+              throw e;
+            }
+
+            let totalContrib;
+            try {
+              const cal = await github.graphql(
+                `query($from: DateTime!, $to: DateTime!) {
+                  viewer { contributionCalendar(from: $from, to: $to) { totalContributions } }
+                }`,
+                { from, to }
+              );
+              totalContrib = cal.viewer.contributionCalendar.totalContributions;
+            } catch (e) {
+              core.setFailed(`${failHint} (contributionCalendar: ${e.message})`);
+              throw e;
+            }
+
+            let commitContrib;
+            try {
+              const col = await github.graphql(
+                `query($from: DateTime!, $to: DateTime!) {
+                  viewer { contributionsCollection(from: $from, to: $to) { totalCommitContributions } }
+                }`,
+                { from, to }
+              );
+              commitContrib = col.viewer.contributionsCollection.totalCommitContributions;
+            } catch (e) {
+              core.setFailed(`${failHint} (contributionsCollection: ${e.message})`);
+              throw e;
+            }
+
+            const data = { viewer: { login } };
 
             const badgeUrl = (label, message, color) =>
               'https://img.shields.io/static/v1?' +
