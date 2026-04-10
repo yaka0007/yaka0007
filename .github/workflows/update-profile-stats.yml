@@ -1,5 +1,6 @@
 # Met à jour les badges de stats du README profil (contributions + commits sur l’année),
-# via l’API GraphQL — inclut l’activité sur les dépôts privés pour TON compte.
+# Préfère l’API GraphQL (privé + public). Si github.com renvoie « Something went wrong »,
+# repli : graphe public (HTML) + Search commits (plafond 1000 ; surtout public sans scope repo).
 #
 # IMPORTANT : le GITHUB_TOKEN des Actions n’est pas ton utilisateur (c’est github-actions[bot]).
 # PAT CLASSIQUE avec scope exact : `read:user` (section « User » des cases à cocher).
@@ -62,12 +63,44 @@ jobs:
             // Repo profile = owner du dépôt (ex. yaka0007/yaka0007 → yaka0007). user(login:) est souvent plus stable que viewer avec un PAT.
             const login = github.context.repo.owner;
 
-            const failHint =
-              'GraphQL contributions failed. Check: (1) classic PAT with scope read:user — see curl step X-OAuth-Scopes; ' +
-              '(2) on token page, Configure SSO for each SAML org; (3) update secret PROFILE_STATS_PAT. ';
+            const toDay = now.toISOString().slice(0, 10);
+
+            /** Somme des data-count sur la page contributions publique (pas d’auth). */
+            async function contributionsFromPublicPage() {
+              const url =
+                'https://github.com/users/' +
+                encodeURIComponent(login) +
+                '/contributions?from=' +
+                year +
+                '-01-01&to=' +
+                toDay;
+              const res = await fetch(url, {
+                headers: {
+                  'User-Agent': 'yaka0007-profile-stats-workflow',
+                  Accept: 'text/html',
+                },
+              });
+              if (!res.ok) throw new Error('contributions page HTTP ' + res.status);
+              const html = await res.text();
+              let sum = 0;
+              const re = /data-count="(\d+)"/g;
+              let m;
+              while ((m = re.exec(html)) !== null) sum += parseInt(m[1], 10);
+              return sum;
+            }
+
+            /** Search API — total_count plafonné à 1000 ; indexe surtout l’activité publique. */
+            async function commitsFromSearch() {
+              const q = 'author:' + login + ' committer-date:' + year + '-01-01..' + toDay;
+              const { data } = await github.rest.search.commits({ q, per_page: 1 });
+              return data.total_count;
+            }
 
             let totalContrib;
             let commitContrib;
+            let footnote =
+              '*Includes private repos · updated weekly by Actions*';
+
             try {
               const out = await github.graphql(
                 `query($login: String!, $from: DateTime!, $to: DateTime!) {
@@ -81,14 +114,50 @@ jobs:
                 { login, from, to }
               );
               if (!out.user || !out.user.contributionsCollection) {
-                throw new Error(`user(login: "${login}") has no contributionsCollection (wrong repo owner?)`);
+                throw new Error('no contributionsCollection for user(login: "' + login + '")');
               }
               const col = out.user.contributionsCollection;
               totalContrib = col.contributionCalendar.totalContributions;
               commitContrib = col.totalCommitContributions;
-            } catch (e) {
-              core.setFailed(`${failHint} (${e.message})`);
-              throw e;
+            } catch (e1) {
+              core.warning('GraphQL full query failed (GitHub often returns generic errors here): ' + e1.message);
+              try {
+                const out = await github.graphql(
+                  `query($login: String!, $from: DateTime!, $to: DateTime!) {
+                    user(login: $login) {
+                      contributionsCollection(from: $from, to: $to) {
+                        totalCommitContributions
+                      }
+                    }
+                  }`,
+                  { login, from, to }
+                );
+                if (!out.user || !out.user.contributionsCollection) {
+                  throw new Error('minimal GraphQL: no user');
+                }
+                commitContrib = out.user.contributionsCollection.totalCommitContributions;
+                totalContrib = await contributionsFromPublicPage();
+                footnote =
+                  '*Commits: GraphQL · contributions graph: public page (GraphQL calendar failed) · weekly*';
+                core.info('Used minimal GraphQL + public contributions page for total.');
+              } catch (e2) {
+                core.warning('GraphQL minimal failed: ' + e2.message);
+                try {
+                  totalContrib = await contributionsFromPublicPage();
+                } catch (e3) {
+                  core.warning('Public contributions page: ' + e3.message);
+                  totalContrib = 0;
+                }
+                try {
+                  commitContrib = await commitsFromSearch();
+                } catch (e4) {
+                  core.warning('Commit search: ' + e4.message);
+                  commitContrib = 0;
+                }
+                footnote =
+                  '*Fallback: public contribution grid + commit search (max 1000; private activity may be incomplete) — GraphQL error on github.com · weekly*';
+                core.info('Used public-page + search fallback.');
+              }
             }
 
             const data = { viewer: { login } };
@@ -107,7 +176,7 @@ jobs:
               '<!--PROFILE_STATS_START-->',
               `![GitHub contributions ${year}](${badgeUrl('contributions ' + year, totalContrib, '22c55e')})`,
               `![Commits ${year}](${badgeUrl('commits ' + year, commitContrib, '0369a1')})`,
-              '*Includes private repos · updated weekly by Actions*',
+              footnote,
               '<!--PROFILE_STATS_END-->',
             ].join('\n');
 
