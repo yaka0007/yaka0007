@@ -1,5 +1,11 @@
 # Met à jour les badges de stats du README profil (contributions + commits sur l’année),
-# via l’API GraphQL — inclut l’activité sur les dépôts privés pour le compte propriétaire.
+# via l’API GraphQL — inclut l’activité sur les dépôts privés pour TON compte.
+#
+# IMPORTANT : le GITHUB_TOKEN des Actions n’est pas ton utilisateur (c’est github-actions[bot]).
+# Il faut un PAT perso avec scope `read:user` :
+#   Repo → Settings → Secrets and variables → Actions → New repository secret
+#   Name: PROFILE_STATS_PAT   Value: (classic PAT ou fine-grained avec read access User)
+#
 # Déclenché : chaque lundi 06:00 UTC, ou manuellement (workflow_dispatch).
 
 name: Update profile stats
@@ -23,10 +29,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Require PROFILE_STATS_PAT secret
+        env:
+          PROFILE_STATS_PAT: ${{ secrets.PROFILE_STATS_PAT }}
+        run: |
+          if [ -z "$PROFILE_STATS_PAT" ]; then
+            echo "::error::Create a classic PAT (scope: read:user) and add repo secret PROFILE_STATS_PAT — see workflow comments."
+            exit 1
+          fi
+
       - name: Fetch GitHub stats & rewrite README
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.PROFILE_STATS_PAT }}
           script: |
             const fs = require('fs');
             const path = 'README.md';
