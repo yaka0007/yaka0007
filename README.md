@@ -18,6 +18,10 @@
 <br/>
 
 [![Mnemosyne Neural OS](https://img.shields.io/badge/Mnemosyne-Neural%20OS-repo-111827?style=for-the-badge&logo=github)](https://github.com/yaka0007/Mnemosyne-Neural-OS)
-[![Latest beta](https://img.shields.io/badge/Download-v1.1.0--beta.1-1e293b?style=for-the-badge&logo=github)](https://github.com/yaka0007/Mnemosyne-Neural-OS/releases/tag/v1.1.0-beta.1)
+[![Download Mnemosyne OS](https://img.shields.io/badge/Download-v1.3.2--infinity-1e293b?style=for-the-badge&logo=github)](https://github.com/yaka0007/Mnemosyne-Neural-OS/releases/tag/v1.3.2-infinity)
+
+<br/>
+
+[![Verify our benchmark](https://img.shields.io/badge/🔍_LongMemEval--M_72.9%25-verify_it_yourself-33ffd6?style=for-the-badge&labelColor=0b1120)](https://yaka0007.github.io/MnemosyneOS---benchmarks/verification-kit/)
 
 </div>
